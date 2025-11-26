@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:catalogo_filmes/telas/home.dart';
 import 'package:catalogo_filmes/telas/modificacao.dart';
 import 'package:catalogo_filmes/telas/detalhes.dart';
-
+import 'package:catalogo_filmes/telas/login.dart'; // Importe
+import 'package:catalogo_filmes/telas/registro.dart'; // Importe
 
 void main() {
   runApp(const MeuAppCatalogo());
@@ -13,24 +14,25 @@ class MeuAppCatalogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp( // Widget que implementa o Material Design do Google
-      title: 'Catálogo de Livros', // titulo 
-
+    return MaterialApp(
+      title: 'Catálogo de Livros',
+      debugShowCheckedModeBanner: false, // Remove a faixa de debug
       theme: ThemeData(
         primarySwatch: Colors.blue, 
         useMaterial3: false,
       ),
+      themeMode: ThemeMode.system,
 
-      themeMode: ThemeMode.system, // usa o tema do celular
+       // Rota inicial agora é o Login
+       initialRoute: '/',
 
-       initialRoute: '/', // rota inicial, a primeira que será aberta quando o sistema rodar
-
-       routes: { // conjunto de rotas 
-        '/': (context) => const PaginaHome(), // tela home
-        'modificacoes': (context) => const paginaModificacoes(), // tela de modificações 
-        'detalhes': (context) => const paginaDetalhes(), // tela de detalhes
+       routes: {
+        '/': (context) => const PaginaLogin(), 
+        'registro': (context) => const PaginaRegistro(),
+        'home': (context) => const PaginaHome(),
+        'modificacoes': (context) => const PaginaModificacoes(),
+        'detalhes': (context) => const PaginaDetalhes(),
         }
-
      );
   }
 }
