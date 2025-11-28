@@ -19,7 +19,7 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
   final _avaliacaoController = TextEditingController();
   final _descricaoController = TextEditingController();
 
-  // LISTA SEM 'const' PARA PODER ADICIONAR NOVOS GÊNEROS DA API
+  // CORREÇÃO 1: Removido 'const' para permitir adicionar gêneros da API
   List<String> _generos = [
     "Selecione um gênero",
     "Ficção",
@@ -49,7 +49,7 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
   }
 
   void _preencherFormulario(Livro livro, {int? indice}) {
-    // === CORREÇÃO: Adiciona o gênero à lista se ele não existir ===
+    // CORREÇÃO 2: Adiciona o gênero à lista se ele não existir (evita erro do Dropdown)
     if (!_generos.contains(livro.genero)) {
       setState(() {
         _generos.add(livro.genero);
@@ -60,30 +60,19 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
       _tituloController.text = livro.titulo;
       _autorController.text = livro.autor;
       _anoController.text = livro.anoPublicacao.toString();
-      _generoSelecionado = livro.genero; // Agora seguro
+      _generoSelecionado = livro.genero; 
       _avaliacaoController.text = livro.avaliacao.toString();
       _descricaoController.text = livro.descricao;
       _indiceEdicao = indice;
     });
     
-    // Atualiza visualmente o Dropdown
+    // Atualiza visualmente o Dropdown com o novo valor
     if (_generoKey.currentState != null) {
        _generoKey.currentState!.didChange(_generoSelecionado);
     }
   }
 
-  void _limparFormulario() {
-    setState(() {
-      _tituloController.clear();
-      _autorController.clear();
-      _anoController.clear();
-      _avaliacaoController.clear();
-      _descricaoController.clear();
-      _generoSelecionado = _generos.first;
-      _indiceEdicao = null;
-    });
-    _generoKey.currentState?.reset();
-  }
+  // CORREÇÃO 3: Função _limparFormulario removida pois não era usada.
 
   Future<void> _salvarLivro() async {
     if (!_formKey.currentState!.validate()) return;
@@ -186,7 +175,7 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
                     padding: const EdgeInsets.only(bottom: 16),
                     child: DropdownButtonFormField<String>(
                       key: _generoKey,
-                      value: _generoSelecionado, // Removemos initialValue para usar value controlado
+                      value: _generoSelecionado, 
                       decoration: InputDecoration(
                         labelText: "Gênero",
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
