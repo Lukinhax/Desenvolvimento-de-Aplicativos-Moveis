@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/livro.dart';
 import '../services/prefs_service.dart';
-import '../widgets/card_livro.dart';
 
 class PaginaModificacoes extends StatefulWidget {
   const PaginaModificacoes({super.key});
@@ -20,7 +19,8 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
   final _avaliacaoController = TextEditingController();
   final _descricaoController = TextEditingController();
 
-  final List<String> _generos = const [
+  // LISTA SEM 'const' PARA PODER ADICIONAR NOVOS GÊNEROS DA API
+  List<String> _generos = [
     "Selecione um gênero",
     "Ficção",
     "Romance",
@@ -33,17 +33,9 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
   ];
 
   String _generoSelecionado = "Selecione um gênero";
-  List<Livro> _livros = [];
-  bool _carregandoLista = true;
   bool _salvando = false;
   int? _indiceEdicao;
   bool _argsProcessados = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _carregarLivros();
-  }
 
   @override
   void didChangeDependencies() {
@@ -56,26 +48,28 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
     _argsProcessados = true;
   }
 
-  Future<void> _carregarLivros() async {
-    final livros = await PrefsService.buscarLivros();
-    if (!mounted) return;
-    setState(() {
-      _livros = livros;
-      _carregandoLista = false;
-    });
-  }
-
   void _preencherFormulario(Livro livro, {int? indice}) {
+    // === CORREÇÃO: Adiciona o gênero à lista se ele não existir ===
+    if (!_generos.contains(livro.genero)) {
+      setState(() {
+        _generos.add(livro.genero);
+      });
+    }
+
     setState(() {
       _tituloController.text = livro.titulo;
       _autorController.text = livro.autor;
       _anoController.text = livro.anoPublicacao.toString();
-      _generoSelecionado = livro.genero;
+      _generoSelecionado = livro.genero; // Agora seguro
       _avaliacaoController.text = livro.avaliacao.toString();
       _descricaoController.text = livro.descricao;
       _indiceEdicao = indice;
     });
-    _generoKey.currentState?.didChange(_generoSelecionado);
+    
+    // Atualiza visualmente o Dropdown
+    if (_generoKey.currentState != null) {
+       _generoKey.currentState!.didChange(_generoSelecionado);
+    }
   }
 
   void _limparFormulario() {
@@ -115,6 +109,8 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
       genero: _generoSelecionado,
       avaliacao: avaliacao,
       descricao: _descricaoController.text.trim(),
+      // Mantém a imagem original se estiver editando, ou null se for novo
+      imagemCapa: null, 
     );
 
     setState(() => _salvando = true);
@@ -124,29 +120,17 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
       } else {
         await PrefsService.salvarLivro(livro);
       }
-      await _carregarLivros();
+      
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_indiceEdicao != null ? 'Livro atualizado!' : 'Livro cadastrado!'),
-        ),
+        SnackBar(content: Text(_indiceEdicao != null ? 'Livro atualizado!' : 'Livro cadastrado!')),
       );
-      _limparFormulario();
+      Navigator.pop(context); // Volta para a Home após salvar
     } finally {
       if (mounted) {
         setState(() => _salvando = false);
       }
     }
-  }
-
-  Future<void> _removerLivro(int indice) async {
-    await PrefsService.removerLivro(indice);
-    await _carregarLivros();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Livro excluído')),
-    );
   }
 
   @override
@@ -163,197 +147,95 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF7086EC),
+      appBar: AppBar(
+        title: Text(_indiceEdicao != null ? "Editar Livro" : "Novo Livro"),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _blocoFormulario(),
-              const SizedBox(height: 30),
-              const Text(
-                "Livros cadastrados",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _carregandoLista
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 40),
-                        child: CircularProgressIndicator(color: Colors.white),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _campo(
+                    controller: _tituloController,
+                    label: "Título",
+                    validator: (v) => v == null || v.trim().isEmpty ? "Informe o título" : null,
+                  ),
+                  _campo(
+                    controller: _autorController,
+                    label: "Autor",
+                    validator: (v) => v == null || v.trim().isEmpty ? "Informe o autor" : null,
+                  ),
+                  _campo(
+                    controller: _anoController,
+                    label: "Ano de Publicação",
+                    tipoNumero: true,
+                    validator: (v) => v == null || v.trim().isEmpty ? "Informe o ano" : null,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: DropdownButtonFormField<String>(
+                      key: _generoKey,
+                      value: _generoSelecionado, // Removemos initialValue para usar value controlado
+                      decoration: InputDecoration(
+                        labelText: "Gênero",
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                    )
-                  : _livros.isEmpty
-                      ? const Text(
-                          'Nenhum livro salvo ainda.',
-                          style: TextStyle(color: Colors.white70, fontSize: 16),
-                        )
-                      : ListView.builder(
-                          physics: const NeverScrollableScrollPhysics(),
-                          shrinkWrap: true,
-                          itemCount: _livros.length,
-                          itemBuilder: (context, index) {
-                            final livro = _livros[index];
-                            return CardLivro(
-                              livro: livro,
-                              onTap: () => Navigator.pushNamed(
-                                context,
-                                'detalhes',
-                                arguments: livro,
-                              ),
-                              onEditar: () => _preencherFormulario(livro, indice: index),
-                              onExcluir: () => _removerLivro(index),
-                            );
-                          },
-                        ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _blocoFormulario() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _indiceEdicao != null ? "Editar Livro" : "Gerenciar Livros",
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back, color: Color(0xFF7086EC)),
-                  label: const Text(
-                    "Voltar",
-                    style: TextStyle(color: Color(0xFF7086EC), fontSize: 18),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _campo(
-              controller: _tituloController,
-              label: "Título",
-              validator: (v) => v == null || v.trim().isEmpty ? "Informe o título" : null,
-            ),
-            _campo(
-              controller: _autorController,
-              label: "Autor",
-              validator: (v) => v == null || v.trim().isEmpty ? "Informe o autor" : null,
-            ),
-            _campo(
-              controller: _anoController,
-              label: "Ano de Publicação",
-              tipoNumero: true,
-              validator: (v) => v == null || v.trim().isEmpty ? "Informe o ano" : null,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: DropdownButtonFormField<String>(
-                key: _generoKey,
-                initialValue: _generoSelecionado,
-                decoration: InputDecoration(
-                  labelText: "Gênero",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                items: _generos
-                    .map((g) => DropdownMenuItem(
-                          value: g,
-                          child: Text(g),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _generoSelecionado = value;
-                    });
-                  }
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: TextFormField(
-                controller: _avaliacaoController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                decoration: InputDecoration(
-                  labelText: "Avaliação (1 a 5)",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                validator: (v) {
-                  final valor = int.tryParse(v ?? '');
-                  if (valor == null) return "Informe uma avaliação";
-                  if (valor < 1 || valor > 5) return "Use valores entre 1 e 5";
-                  return null;
-                },
-              ),
-            ),
-            _campo(
-              controller: _descricaoController,
-              label: "Descrição",
-              multiline: true,
-              validator: (v) => v == null || v.trim().isEmpty ? "Informe a descrição" : null,
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _limparFormulario,
-                  child: const Text("Cancelar"),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF7086EC),
-                  ),
-                  onPressed: _salvando ? null : _salvarLivro,
-                  child: SizedBox(
-                    height: 48,
-                    child: Center(
-                      child: _salvando
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(_indiceEdicao != null ? "Atualizar Livro" : "Salvar Livro"),
+                      items: _generos.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                      onChanged: (value) {
+                        if (value != null) setState(() => _generoSelecionado = value);
+                      },
                     ),
                   ),
-                ),
-              ],
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: TextFormField(
+                      controller: _avaliacaoController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        labelText: "Avaliação (1 a 5)",
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (v) {
+                        final valor = int.tryParse(v ?? '');
+                        if (valor == null || valor < 1 || valor > 5) return "Entre 1 e 5";
+                        return null;
+                      },
+                    ),
+                  ),
+                  _campo(
+                    controller: _descricaoController,
+                    label: "Descrição",
+                    multiline: true,
+                    validator: (v) => v == null || v.trim().isEmpty ? "Informe a descrição" : null,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7086EC)),
+                      onPressed: _salvando ? null : _salvarLivro,
+                      child: _salvando
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(_indiceEdicao != null ? "Atualizar" : "Salvar"),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -375,9 +257,7 @@ class _PaginaModificacoesState extends State<PaginaModificacoes> {
         inputFormatters: tipoNumero ? [FilteringTextInputFormatter.digitsOnly] : null,
         decoration: InputDecoration(
           labelText: label,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
         validator: validator,
       ),

@@ -6,6 +6,7 @@ class CardLivro extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onEditar;
   final VoidCallback? onExcluir;
+  final VoidCallback? onSalvar; // Para a lista da API
 
   const CardLivro({
     super.key,
@@ -13,6 +14,7 @@ class CardLivro extends StatelessWidget {
     this.onTap,
     this.onEditar,
     this.onExcluir,
+    this.onSalvar,
   });
 
   @override
@@ -27,67 +29,82 @@ class CardLivro extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 6,
-              offset: Offset(0, 3),
-            )
+            BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3))
           ],
         ),
         child: Row(
           children: [
+            // Imagem (Capa) ou Ícone
             Container(
-              width: 56,
-              height: 56,
+              width: 60,
+              height: 90,
               decoration: BoxDecoration(
                 color: const Color(0xFFE8ECFF),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
+                image: livro.imagemCapa != null 
+                  ? DecorationImage(
+                      image: NetworkImage(livro.imagemCapa!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
               ),
-              child: const Icon(Icons.menu_book, color: Color(0xFF3540A5)),
+              child: livro.imagemCapa == null 
+                  ? const Icon(Icons.menu_book, color: Color(0xFF3540A5)) 
+                  : null,
             ),
             const SizedBox(width: 16),
+            // Dados do Livro
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     livro.titulo,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "${livro.autor} • ${livro.anoPublicacao}",
-                    style: const TextStyle(color: Colors.black54),
+                    livro.autor,
+                    style: const TextStyle(color: Colors.black54, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: List.generate(
-                      5,
-                      (index) => Icon(
-                        index < livro.avaliacao ? Icons.star : Icons.star_border,
-                        color: Colors.amber.shade600,
-                        size: 18,
+                  if (livro.avaliacao > 0)
+                    Row(
+                      children: List.generate(
+                        5,
+                        (index) => Icon(
+                          index < livro.avaliacao ? Icons.star : Icons.star_border,
+                          color: Colors.amber.shade600,
+                          size: 16,
+                        ),
                       ),
-                    ),
-                  )
+                    )
+                  else
+                    const Text("Sem avaliação", style: TextStyle(fontSize: 10, color: Colors.grey)),
                 ],
               ),
             ),
+            // Botões de Ação
             Column(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.edit, color: Color(0xFF7086EC)),
-                  tooltip: 'Editar',
-                  onPressed: onEditar,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.redAccent),
-                  tooltip: 'Excluir',
-                  onPressed: onExcluir,
-                ),
+                if (onSalvar != null)
+                  IconButton(
+                    icon: const Icon(Icons.bookmark_add, color: Colors.green),
+                    tooltip: 'Salvar na Biblioteca',
+                    onPressed: onSalvar,
+                  ),
+                if (onEditar != null)
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Color(0xFF7086EC)),
+                    onPressed: onEditar,
+                  ),
+                if (onExcluir != null)
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.redAccent),
+                    onPressed: onExcluir,
+                  ),
               ],
             ),
           ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/livro.dart';
+import '../services/api_service.dart';
 import '../services/prefs_service.dart';
 import '../widgets/card_livro.dart';
 
@@ -11,166 +12,176 @@ class PaginaHome extends StatefulWidget {
 }
 
 class _PaginaHomeState extends State<PaginaHome> {
-  List<Livro> _livros = [];
-  bool _carregando = true;
+  int _indiceAba = 0; // 0 = Local, 1 = API
+  
+  // Variáveis da Lista Local
+  List<Livro> _meusLivros = [];
+  bool _carregandoLocal = true;
+
+  // Variáveis da API
+  late Future<List<Livro>> _apiFuture;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _carregarLivros();
+    _carregarLivrosLocais();
+    _apiFuture = ApiService.buscarLivrosOnline("programacao");
   }
 
-  Future<void> _carregarLivros() async {
-    setState(() => _carregando = true);
+  // --- Lógica Local (CRUD) ---
+  Future<void> _carregarLivrosLocais() async {
+    setState(() => _carregandoLocal = true);
     final livros = await PrefsService.buscarLivros();
     if (!mounted) return;
     setState(() {
-      _livros = livros;
-      _carregando = false;
+      _meusLivros = livros;
+      _carregandoLocal = false;
     });
   }
 
-  Future<void> _navegarParaCadastro({Livro? livro, int? indice}) async {
-    final args = (livro != null && indice != null)
-        ? {
-            'livro': livro,
-            'indice': indice,
-          }
-        : null;
-    await Navigator.pushNamed(
-      context,
-      'modificacoes',
-      arguments: args,
-    );
+  Future<void> _removerLocal(int index) async {
+    await PrefsService.removerLivro(index);
+    _carregarLivrosLocais();
     if (!mounted) return;
-    await _carregarLivros();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Livro removido.")));
   }
 
-  void _abrirDetalhes(Livro livro) {
-    Navigator.pushNamed(context, 'detalhes', arguments: livro);
+  Future<void> _navegarCadastro({Livro? livro, int? indice}) async {
+    final args = (livro != null && indice != null) ? {'livro': livro, 'indice': indice} : null;
+    await Navigator.pushNamed(context, 'modificacoes', arguments: args);
+    _carregarLivrosLocais(); // Recarrega ao voltar
   }
 
-  Future<void> _removerLivro(int indice) async {
-    await PrefsService.removerLivro(indice);
-    await _carregarLivros();
+  // --- Lógica da API ---
+  void _pesquisarApi() {
+    setState(() {
+      _apiFuture = ApiService.buscarLivrosOnline(_searchController.text);
+    });
+  }
+
+  Future<void> _salvarDaApi(Livro livro) async {
+    await PrefsService.salvarLivro(livro);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Livro removido com sucesso')),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Livro salvo na biblioteca!")));
+    _carregarLivrosLocais(); // Atualiza a lista local em background
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF7086EC),
+      
+      // Barra Inferior para navegar entre Abas
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _indiceAba,
+        onTap: (idx) => setState(() => _indiceAba = idx),
+        selectedItemColor: const Color(0xFF7086EC),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.library_books), label: "Minha Biblioteca"),
+          BottomNavigationBarItem(icon: Icon(Icons.search), label: "Buscar Online"),
+        ],
+      ),
+
+      // Botão Flutuante (Só aparece na aba Local para Criar novo)
+      floatingActionButton: _indiceAba == 0 
+        ? FloatingActionButton(
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF7086EC),
+            onPressed: () => _navegarCadastro(),
+            child: const Icon(Icons.add),
+          )
+        : null,
+
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            children: [
-              _cabecalho(),
-              const SizedBox(height: 32),
-              Expanded(
-                child: _carregando
-                    ? const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      )
-                    : RefreshIndicator(
-                        color: const Color(0xFF7086EC),
-                        onRefresh: _carregarLivros,
-                        child: _livros.isEmpty
-                            ? ListView(
-                                children: const [
-                                  SizedBox(height: 120),
-                                  Center(
-                                    child: Text(
-                                      'Nenhum livro cadastrado ainda.',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : ListView.builder(
-                                itemCount: _livros.length,
-                                itemBuilder: (context, index) {
-                                  final livro = _livros[index];
-                                  return CardLivro(
-                                    livro: livro,
-                                    onTap: () => _abrirDetalhes(livro),
-                                    onEditar: () => _navegarParaCadastro(
-                                      livro: livro,
-                                      indice: index,
-                                    ),
-                                    onExcluir: () => _removerLivro(index),
-                                  );
-                                },
-                              ),
-                      ),
-              ),
-            ],
-          ),
+          padding: const EdgeInsets.all(16),
+          child: _indiceAba == 0 ? _buildListaLocal() : _buildListaApi(),
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF7086EC),
-        icon: const Icon(Icons.add),
-        label: const Text('Novo livro'),
-        onPressed: () => _navegarParaCadastro(),
       ),
     );
   }
 
-  Widget _cabecalho() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      height: 120,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 6,
-            offset: Offset(0, 3),
-          )
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text(
-            "Minha Biblioteca",
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
+  // === WIDGET DA ABA 1: LOCAL ===
+  Widget _buildListaLocal() {
+    if (_carregandoLocal) return const Center(child: CircularProgressIndicator(color: Colors.white));
+    
+    if (_meusLivros.isEmpty) {
+      return const Center(
+        child: Text("Sua biblioteca está vazia.\nAdicione livros manualmente ou da API!", 
+          textAlign: TextAlign.center, 
+          style: TextStyle(color: Colors.white, fontSize: 16)
+        )
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Meus Livros Salvos", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        Expanded(
+          child: ListView.builder(
+            itemCount: _meusLivros.length,
+            itemBuilder: (context, index) {
+              final livro = _meusLivros[index];
+              return CardLivro(
+                livro: livro,
+                onTap: () => Navigator.pushNamed(context, 'detalhes', arguments: livro),
+                onEditar: () => _navegarCadastro(livro: livro, indice: index),
+                onExcluir: () => _removerLocal(index),
+              );
+            },
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF7086EC),
-              borderRadius: BorderRadius.circular(10),
+        ),
+      ],
+    );
+  }
+
+  // === WIDGET DA ABA 2: API ===
+  Widget _buildListaApi() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: "Pesquisar no Google Books",
+              suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _pesquisarApi),
             ),
-            child: TextButton.icon(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              ),
-              onPressed: () => _navegarParaCadastro(),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text(
-                "Adicionar livro",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                ),
-              ),
-            ),
+            onSubmitted: (_) => _pesquisarApi(),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: FutureBuilder<List<Livro>>(
+            future: _apiFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator(color: Colors.white));
+              }
+              if (snapshot.hasError) return const Center(child: Text("Erro na busca", style: TextStyle(color: Colors.white)));
+              if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text("Nada encontrado", style: TextStyle(color: Colors.white)));
+
+              final livros = snapshot.data!;
+              return ListView.builder(
+                itemCount: livros.length,
+                itemBuilder: (context, index) {
+                  return CardLivro(
+                    livro: livros[index],
+                    // Ação de Salvar (Copia da API para o Local)
+                    onSalvar: () => _salvarDaApi(livros[index]),
+                    onTap: () => Navigator.pushNamed(context, 'detalhes', arguments: livros[index]),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
